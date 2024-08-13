@@ -6,7 +6,7 @@ on:
     types: [released, prereleased]
   # On each commit merged into main, push sha and branch patterns to prefect-dev
   push:
-    branches: [main]
+    branches: [main, fac-opsmill-ci]
     paths:
       - "Dockerfile"
       - ".dockerignore"
@@ -35,18 +35,14 @@ on:
 jobs:
   publish-docker-images:
     name: Build and publish to DockerHub
-    runs-on: ubuntu-latest
+    runs-on:
+      group: huge-runners
     environment: ${{ github.event_name == 'release' && github.event.release.prerelease && 'pre-release' || github.event_name == 'release' && 'prod' || 'dev' }}
     strategy:
       matrix:
         flavor:
-          - ""
-          - "-conda"
           - "-kubernetes"
         python-version:
-          - "3.9"
-          - "3.10"
-          - "3.11"
           - "3.12"
 
     steps:
@@ -69,8 +65,9 @@ jobs:
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ vars.HARBOR_HOST }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -83,22 +80,12 @@ jobs:
         # do not generate the development tags on release events
         if: ${{ github.event_name != 'release' }}
         with:
-          images: prefecthq/prefect-dev
+          images: ${{ vars.HARBOR_HOST }}/opsmill/prefect
           tags: |
             type=raw,value=${{ github.ref_name }},suffix=-python${{ matrix.python-version }}${{ matrix.flavor }}
             type=sha,suffix=-python${{ matrix.python-version }}${{ matrix.flavor }}
           flavor: |
             latest=false
-
-      - name: Determine latest tag
-        # https://stackoverflow.com/a/75079768/5511061
-        run: |
-          echo "LATEST_TAG=$(curl -qsSL \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${{ github.api_url }}/repos/${{ github.repository }}/releases/latest" \
-          | jq -r .tag_name)" >> $GITHUB_ENV
 
       - name: Generate tags for prefecthq/prefect
         id: metadata-prod
@@ -106,7 +93,7 @@ jobs:
         # generate the production tags on release events or when manually triggered for 3-latest
         if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_3_latest == 'true') }}
         with:
-          images: prefecthq/prefect
+          images: ${{ vars.HARBOR_HOST }}/opsmill/prefect
           # push `latest`, `X.Y` and `X` tags only when the release is not marked as prerelease
           # push `latest` and `X` tags only when the release is marked as latest
           # push `3-latest` tags on latest release or manual trigger
