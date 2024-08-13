@@ -337,7 +337,7 @@ def create_ui_app(ephemeral: bool) -> FastAPI:
         mimetypes.init()
         mimetypes.add_type("application/javascript", ".js")
 
-    @ui_app.get(f"{stripped_base_url}/ui-settings")
+    @ui_app.get(f"/ui-settings")
     def ui_settings():
         return {
             "api_url": prefect.settings.PREFECT_UI_API_URL.value(),
@@ -387,7 +387,7 @@ def create_ui_app(ephemeral: bool) -> FastAPI:
             create_ui_static_subpath()
 
         ui_app.mount(
-            PREFECT_UI_SERVE_BASE.value(),
+            "/",
             SPAStaticFiles(directory=static_dir),
             name="ui_root",
         )
@@ -628,6 +628,7 @@ def create_app(
         title=TITLE,
         version=API_VERSION,
         lifespan=lifespan,
+        root_path=prefect.settings.PREFECT_UI_SERVE_BASE.value().rstrip("/"),
     )
     api_app = create_api_app(
         fast_api_app_kwargs={
